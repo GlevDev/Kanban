@@ -1,6 +1,6 @@
 <script>
   import { createEventDispatcher } from "svelte";
-  import { fade } from "svelte/transition";
+  import { slide } from "svelte/transition";
 
   const dispatch = createEventDispatcher();
 
@@ -8,6 +8,8 @@
   export let value = "New Task";
   export let firstCard = false;
   export let lastCard = false;
+
+  let taskJustAdded = false;
 </script>
 
 <style>
@@ -22,6 +24,12 @@
     background: white;
     color: #333;
     border-radius: 0.2rem;
+    transition: background-color 200ms linear;
+  }
+  .taskJustAdded {
+    border: 1px solid rgb(0, 121, 36);
+    background-color: rgb(0, 121, 36);
+    color: white;
   }
   button {
     position: absolute;
@@ -66,7 +74,12 @@
   }
 </style>
 
-<label transition:fade>
+<label
+  transition:slide
+  on:introend={() => {
+    taskJustAdded = true;
+    setTimeout(() => {taskJustAdded = false;}, 400);
+  }}>
   <input
     {id}
     type="text"
@@ -74,7 +87,8 @@
     bind:value
     on:blur={() => {
       dispatch('blurred', { value: value, id: id });
-    }} />
+    }}
+    class:taskJustAdded />
   <button
     id="btnClose"
     on:click={() => {

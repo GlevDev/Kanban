@@ -346,6 +346,124 @@ var app = (function () {
         }
     }
     const null_transition = { duration: 0 };
+    function create_in_transition(node, fn, params) {
+        let config = fn(node, params);
+        let running = false;
+        let animation_name;
+        let task;
+        let uid = 0;
+        function cleanup() {
+            if (animation_name)
+                delete_rule(node, animation_name);
+        }
+        function go() {
+            const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
+            if (css)
+                animation_name = create_rule(node, 0, 1, duration, delay, easing, css, uid++);
+            tick(0, 1);
+            const start_time = now() + delay;
+            const end_time = start_time + duration;
+            if (task)
+                task.abort();
+            running = true;
+            add_render_callback(() => dispatch(node, true, 'start'));
+            task = loop(now => {
+                if (running) {
+                    if (now >= end_time) {
+                        tick(1, 0);
+                        dispatch(node, true, 'end');
+                        cleanup();
+                        return running = false;
+                    }
+                    if (now >= start_time) {
+                        const t = easing((now - start_time) / duration);
+                        tick(t, 1 - t);
+                    }
+                }
+                return running;
+            });
+        }
+        let started = false;
+        return {
+            start() {
+                if (started)
+                    return;
+                delete_rule(node);
+                if (is_function(config)) {
+                    config = config();
+                    wait().then(go);
+                }
+                else {
+                    go();
+                }
+            },
+            invalidate() {
+                started = false;
+            },
+            end() {
+                if (running) {
+                    cleanup();
+                    running = false;
+                }
+            }
+        };
+    }
+    function create_out_transition(node, fn, params) {
+        let config = fn(node, params);
+        let running = true;
+        let animation_name;
+        const group = outros;
+        group.r += 1;
+        function go() {
+            const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
+            if (css)
+                animation_name = create_rule(node, 1, 0, duration, delay, easing, css);
+            const start_time = now() + delay;
+            const end_time = start_time + duration;
+            add_render_callback(() => dispatch(node, false, 'start'));
+            loop(now => {
+                if (running) {
+                    if (now >= end_time) {
+                        tick(0, 1);
+                        dispatch(node, false, 'end');
+                        if (!--group.r) {
+                            // this will result in `end()` being called,
+                            // so we don't need to clean up here
+                            run_all(group.c);
+                        }
+                        return false;
+                    }
+                    if (now >= start_time) {
+                        const t = easing((now - start_time) / duration);
+                        tick(1 - t, t);
+                    }
+                }
+                return running;
+            });
+        }
+        if (is_function(config)) {
+            wait().then(() => {
+                // @ts-ignore
+                config = config();
+                go();
+            });
+        }
+        else {
+            go();
+        }
+        return {
+            end(reset) {
+                if (reset && config.tick) {
+                    config.tick(1, 0);
+                }
+                if (running) {
+                    if (animation_name)
+                        delete_rule(node, animation_name);
+                    running = false;
+                }
+            }
+        };
+    }
     function create_bidirectional_transition(node, fn, params, intro) {
         let config = fn(node, params);
         let t = intro ? 0 : 1;
@@ -838,10 +956,50 @@ var app = (function () {
     	}
     }
 
+    function cubicOut(t) {
+        const f = t - 1.0;
+        return f * f * f + 1.0;
+    }
+
+    function fade(node, { delay = 0, duration = 400, easing = identity }) {
+        const o = +getComputedStyle(node).opacity;
+        return {
+            delay,
+            duration,
+            easing,
+            css: t => `opacity: ${t * o}`
+        };
+    }
+    function slide(node, { delay = 0, duration = 400, easing = cubicOut }) {
+        const style = getComputedStyle(node);
+        const opacity = +style.opacity;
+        const height = parseFloat(style.height);
+        const padding_top = parseFloat(style.paddingTop);
+        const padding_bottom = parseFloat(style.paddingBottom);
+        const margin_top = parseFloat(style.marginTop);
+        const margin_bottom = parseFloat(style.marginBottom);
+        const border_top_width = parseFloat(style.borderTopWidth);
+        const border_bottom_width = parseFloat(style.borderBottomWidth);
+        return {
+            delay,
+            duration,
+            easing,
+            css: t => `overflow: hidden;` +
+                `opacity: ${Math.min(t * 20, 1) * opacity};` +
+                `height: ${t * height}px;` +
+                `padding-top: ${t * padding_top}px;` +
+                `padding-bottom: ${t * padding_bottom}px;` +
+                `margin-top: ${t * margin_top}px;` +
+                `margin-bottom: ${t * margin_bottom}px;` +
+                `border-top-width: ${t * border_top_width}px;` +
+                `border-bottom-width: ${t * border_bottom_width}px;`
+        };
+    }
+
     /* src\UI\Card.svelte generated by Svelte v3.20.1 */
     const file$1 = "src\\UI\\Card.svelte";
 
-    // (65:8) Empty Card
+    // (72:8) Empty Card
     function fallback_block(ctx) {
     	let t;
 
@@ -861,7 +1019,7 @@ var app = (function () {
     		block,
     		id: fallback_block.name,
     		type: "fallback",
-    		source: "(65:8) Empty Card",
+    		source: "(72:8) Empty Card",
     		ctx
     	});
 
@@ -875,10 +1033,12 @@ var app = (function () {
     	let t1;
     	let button;
     	let t3;
+    	let article_intro;
+    	let article_outro;
     	let current;
     	let dispose;
-    	const default_slot_template = /*$$slots*/ ctx[5].default;
-    	const default_slot = create_slot(default_slot_template, ctx, /*$$scope*/ ctx[4], null);
+    	const default_slot_template = /*$$slots*/ ctx[7].default;
+    	const default_slot = create_slot(default_slot_template, ctx, /*$$scope*/ ctx[6], null);
     	const default_slot_or_fallback = default_slot || fallback_block(ctx);
 
     	const block = {
@@ -892,14 +1052,14 @@ var app = (function () {
     			t3 = space();
     			if (default_slot_or_fallback) default_slot_or_fallback.c();
     			attr_dev(button, "class", "svelte-1gd8pl");
-    			add_location(button, file$1, 56, 4, 1012);
+    			add_location(button, file$1, 63, 4, 1200);
     			attr_dev(h3, "class", "svelte-1gd8pl");
     			toggle_class(h3, "newCardTitle", /*newCard*/ ctx[2]);
-    			add_location(h3, file$1, 54, 2, 960);
+    			add_location(h3, file$1, 61, 2, 1148);
     			attr_dev(article, "id", /*id*/ ctx[0]);
     			attr_dev(article, "class", "svelte-1gd8pl");
     			toggle_class(article, "newCard", /*newCard*/ ctx[2]);
-    			add_location(article, file$1, 53, 0, 928);
+    			add_location(article, file$1, 56, 0, 1035);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -918,7 +1078,7 @@ var app = (function () {
 
     			current = true;
     			if (remount) dispose();
-    			dispose = listen_dev(button, "click", /*click_handler*/ ctx[6], false, false, false);
+    			dispose = listen_dev(button, "click", /*click_handler*/ ctx[8], false, false, false);
     		},
     		p: function update(ctx, [dirty]) {
     			if (!current || dirty & /*title*/ 2) set_data_dev(t0, /*title*/ ctx[1]);
@@ -928,8 +1088,8 @@ var app = (function () {
     			}
 
     			if (default_slot) {
-    				if (default_slot.p && dirty & /*$$scope*/ 16) {
-    					default_slot.p(get_slot_context(default_slot_template, ctx, /*$$scope*/ ctx[4], null), get_slot_changes(default_slot_template, /*$$scope*/ ctx[4], dirty, null));
+    				if (default_slot.p && dirty & /*$$scope*/ 64) {
+    					default_slot.p(get_slot_context(default_slot_template, ctx, /*$$scope*/ ctx[6], null), get_slot_changes(default_slot_template, /*$$scope*/ ctx[6], dirty, null));
     				}
     			}
 
@@ -944,15 +1104,25 @@ var app = (function () {
     		i: function intro(local) {
     			if (current) return;
     			transition_in(default_slot_or_fallback, local);
+
+    			add_render_callback(() => {
+    				if (article_outro) article_outro.end(1);
+    				if (!article_intro) article_intro = create_in_transition(article, fade, { duration: /*introtime*/ ctx[4] });
+    				article_intro.start();
+    			});
+
     			current = true;
     		},
     		o: function outro(local) {
     			transition_out(default_slot_or_fallback, local);
+    			if (article_intro) article_intro.invalidate();
+    			article_outro = create_out_transition(article, fade, { duration: /*outrotime*/ ctx[5] });
     			current = false;
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(article);
     			if (default_slot_or_fallback) default_slot_or_fallback.d(detaching);
+    			if (detaching && article_outro) article_outro.end();
     			dispose();
     		}
     	};
@@ -973,6 +1143,8 @@ var app = (function () {
     	let { id } = $$props;
     	let { title = "" } = $$props;
     	let { newCard = false } = $$props;
+    	let introtime = 400;
+    	let outrotime = newCard ? 0 : 400;
     	const writable_props = ["id", "title", "newCard"];
 
     	Object.keys($$props).forEach(key => {
@@ -990,28 +1162,43 @@ var app = (function () {
     		if ("id" in $$props) $$invalidate(0, id = $$props.id);
     		if ("title" in $$props) $$invalidate(1, title = $$props.title);
     		if ("newCard" in $$props) $$invalidate(2, newCard = $$props.newCard);
-    		if ("$$scope" in $$props) $$invalidate(4, $$scope = $$props.$$scope);
+    		if ("$$scope" in $$props) $$invalidate(6, $$scope = $$props.$$scope);
     	};
 
     	$$self.$capture_state = () => ({
     		createEventDispatcher,
+    		fade,
     		dispatch,
     		id,
     		title,
-    		newCard
+    		newCard,
+    		introtime,
+    		outrotime
     	});
 
     	$$self.$inject_state = $$props => {
     		if ("id" in $$props) $$invalidate(0, id = $$props.id);
     		if ("title" in $$props) $$invalidate(1, title = $$props.title);
     		if ("newCard" in $$props) $$invalidate(2, newCard = $$props.newCard);
+    		if ("introtime" in $$props) $$invalidate(4, introtime = $$props.introtime);
+    		if ("outrotime" in $$props) $$invalidate(5, outrotime = $$props.outrotime);
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [id, title, newCard, dispatch, $$scope, $$slots, click_handler];
+    	return [
+    		id,
+    		title,
+    		newCard,
+    		dispatch,
+    		introtime,
+    		outrotime,
+    		$$scope,
+    		$$slots,
+    		click_handler
+    	];
     }
 
     class Card extends SvelteComponentDev {
@@ -1059,20 +1246,10 @@ var app = (function () {
     	}
     }
 
-    function fade(node, { delay = 0, duration = 400, easing = identity }) {
-        const o = +getComputedStyle(node).opacity;
-        return {
-            delay,
-            duration,
-            easing,
-            css: t => `opacity: ${t * o}`
-        };
-    }
-
     /* src\UI\Task.svelte generated by Svelte v3.20.1 */
     const file$2 = "src\\UI\\Task.svelte";
 
-    // (85:2) {#if !firstCard}
+    // (99:2) {#if !firstCard}
     function create_if_block_1(ctx) {
     	let button;
     	let dispose;
@@ -1082,13 +1259,13 @@ var app = (function () {
     			button = element("button");
     			button.textContent = "←";
     			attr_dev(button, "id", "btnLeft");
-    			attr_dev(button, "class", "btnArrow svelte-4ad1ai");
-    			add_location(button, file$2, 85, 4, 1619);
+    			attr_dev(button, "class", "btnArrow svelte-1iu8fh3");
+    			add_location(button, file$2, 99, 4, 1964);
     		},
     		m: function mount(target, anchor, remount) {
     			insert_dev(target, button, anchor);
     			if (remount) dispose();
-    			dispose = listen_dev(button, "click", /*click_handler_1*/ ctx[8], false, false, false);
+    			dispose = listen_dev(button, "click", /*click_handler_1*/ ctx[9], false, false, false);
     		},
     		p: noop,
     		d: function destroy(detaching) {
@@ -1101,14 +1278,14 @@ var app = (function () {
     		block,
     		id: create_if_block_1.name,
     		type: "if",
-    		source: "(85:2) {#if !firstCard}",
+    		source: "(99:2) {#if !firstCard}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (95:2) {#if !lastCard}
+    // (109:2) {#if !lastCard}
     function create_if_block(ctx) {
     	let button;
     	let dispose;
@@ -1118,13 +1295,13 @@ var app = (function () {
     			button = element("button");
     			button.textContent = "→";
     			attr_dev(button, "id", "btnRight");
-    			attr_dev(button, "class", "btnArrow svelte-4ad1ai");
-    			add_location(button, file$2, 95, 4, 1821);
+    			attr_dev(button, "class", "btnArrow svelte-1iu8fh3");
+    			add_location(button, file$2, 109, 4, 2166);
     		},
     		m: function mount(target, anchor, remount) {
     			insert_dev(target, button, anchor);
     			if (remount) dispose();
-    			dispose = listen_dev(button, "click", /*click_handler_2*/ ctx[9], false, false, false);
+    			dispose = listen_dev(button, "click", /*click_handler_2*/ ctx[10], false, false, false);
     		},
     		p: noop,
     		d: function destroy(detaching) {
@@ -1137,7 +1314,7 @@ var app = (function () {
     		block,
     		id: create_if_block.name,
     		type: "if",
-    		source: "(95:2) {#if !lastCard}",
+    		source: "(109:2) {#if !lastCard}",
     		ctx
     	});
 
@@ -1171,13 +1348,14 @@ var app = (function () {
     			attr_dev(input, "id", /*id*/ ctx[1]);
     			attr_dev(input, "type", "text");
     			attr_dev(input, "placeholder", "Insert task...");
-    			attr_dev(input, "class", "svelte-4ad1ai");
-    			add_location(input, file$2, 69, 2, 1306);
+    			attr_dev(input, "class", "svelte-1iu8fh3");
+    			toggle_class(input, "taskJustAdded", /*taskJustAdded*/ ctx[4]);
+    			add_location(input, file$2, 82, 2, 1626);
     			attr_dev(button, "id", "btnClose");
-    			attr_dev(button, "class", "svelte-4ad1ai");
-    			add_location(button, file$2, 77, 2, 1480);
-    			attr_dev(label, "class", "svelte-4ad1ai");
-    			add_location(label, file$2, 68, 0, 1279);
+    			attr_dev(button, "class", "svelte-1iu8fh3");
+    			add_location(button, file$2, 91, 2, 1825);
+    			attr_dev(label, "class", "svelte-1iu8fh3");
+    			add_location(label, file$2, 76, 0, 1484);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -1196,9 +1374,10 @@ var app = (function () {
     			if (remount) run_all(dispose);
 
     			dispose = [
-    				listen_dev(input, "input", /*input_input_handler*/ ctx[5]),
-    				listen_dev(input, "blur", /*blur_handler*/ ctx[6], false, false, false),
-    				listen_dev(button, "click", /*click_handler*/ ctx[7], false, false, false)
+    				listen_dev(input, "input", /*input_input_handler*/ ctx[6]),
+    				listen_dev(input, "blur", /*blur_handler*/ ctx[7], false, false, false),
+    				listen_dev(button, "click", /*click_handler*/ ctx[8], false, false, false),
+    				listen_dev(label, "introend", /*introend_handler*/ ctx[11], false, false, false)
     			];
     		},
     		p: function update(ctx, [dirty]) {
@@ -1208,6 +1387,10 @@ var app = (function () {
 
     			if (dirty & /*value*/ 1 && input.value !== /*value*/ ctx[0]) {
     				set_input_value(input, /*value*/ ctx[0]);
+    			}
+
+    			if (dirty & /*taskJustAdded*/ 16) {
+    				toggle_class(input, "taskJustAdded", /*taskJustAdded*/ ctx[4]);
     			}
 
     			if (!/*firstCard*/ ctx[2]) {
@@ -1240,14 +1423,14 @@ var app = (function () {
     			if (current) return;
 
     			add_render_callback(() => {
-    				if (!label_transition) label_transition = create_bidirectional_transition(label, fade, {}, true);
+    				if (!label_transition) label_transition = create_bidirectional_transition(label, slide, {}, true);
     				label_transition.run(1);
     			});
 
     			current = true;
     		},
     		o: function outro(local) {
-    			if (!label_transition) label_transition = create_bidirectional_transition(label, fade, {}, false);
+    			if (!label_transition) label_transition = create_bidirectional_transition(label, slide, {}, false);
     			label_transition.run(0);
     			current = false;
     		},
@@ -1277,6 +1460,7 @@ var app = (function () {
     	let { value = "New Task" } = $$props;
     	let { firstCard = false } = $$props;
     	let { lastCard = false } = $$props;
+    	let taskJustAdded = false;
     	const writable_props = ["id", "value", "firstCard", "lastCard"];
 
     	Object.keys($$props).forEach(key => {
@@ -1307,6 +1491,17 @@ var app = (function () {
     		dispatch("moveRight", { value, id });
     	};
 
+    	const introend_handler = () => {
+    		$$invalidate(4, taskJustAdded = true);
+
+    		setTimeout(
+    			() => {
+    				$$invalidate(4, taskJustAdded = false);
+    			},
+    			400
+    		);
+    	};
+
     	$$self.$set = $$props => {
     		if ("id" in $$props) $$invalidate(1, id = $$props.id);
     		if ("value" in $$props) $$invalidate(0, value = $$props.value);
@@ -1316,12 +1511,13 @@ var app = (function () {
 
     	$$self.$capture_state = () => ({
     		createEventDispatcher,
-    		fade,
+    		slide,
     		dispatch,
     		id,
     		value,
     		firstCard,
-    		lastCard
+    		lastCard,
+    		taskJustAdded
     	});
 
     	$$self.$inject_state = $$props => {
@@ -1329,6 +1525,7 @@ var app = (function () {
     		if ("value" in $$props) $$invalidate(0, value = $$props.value);
     		if ("firstCard" in $$props) $$invalidate(2, firstCard = $$props.firstCard);
     		if ("lastCard" in $$props) $$invalidate(3, lastCard = $$props.lastCard);
+    		if ("taskJustAdded" in $$props) $$invalidate(4, taskJustAdded = $$props.taskJustAdded);
     	};
 
     	if ($$props && "$$inject" in $$props) {
@@ -1340,12 +1537,14 @@ var app = (function () {
     		id,
     		firstCard,
     		lastCard,
+    		taskJustAdded,
     		dispatch,
     		input_input_handler,
     		blur_handler,
     		click_handler,
     		click_handler_1,
-    		click_handler_2
+    		click_handler_2,
+    		introend_handler
     	];
     }
 

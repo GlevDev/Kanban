@@ -1,11 +1,14 @@
 <script>
   import { createEventDispatcher } from "svelte";
+  import { fade } from "svelte/transition";
 
   const dispatch = createEventDispatcher();
 
   export let id;
   export let title = "";
   export let newCard = false;
+  let introtime = 400;
+  let outrotime = newCard ? 0 : 400;
 </script>
 
 <style>
@@ -51,7 +54,11 @@
   }
 </style>
 
-<article {id} class:newCard>
+<article
+  {id}
+  class:newCard
+  in:fade={{ duration: introtime }}
+  out:fade={{ duration: outrotime }}>
   <h3 class:newCardTitle={newCard}>
     {title}
     <button
