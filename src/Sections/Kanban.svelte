@@ -2,8 +2,11 @@
   import Card from "../UI/Card.svelte";
   import Task from "../UI/Task.svelte";
   import Flex from "../Layout/Flex.svelte";
+  import { flip } from "svelte/animate";
+  import { fade } from "svelte/transition";
 
   let newCardCreated = false;
+  let hideAddCardBtn = false;
   let newCardTitle = "";
   let newCardInput;
   let kanbanBoard = [
@@ -45,6 +48,7 @@
 
   function addCard() {
     newCardCreated = true;
+    hideAddCardBtn = true;
     setTimeout(() => {
       newCardInput.focus();
     }, 10);
@@ -53,6 +57,7 @@
   function newCardAdded(e) {
     newCardTitle = "";
     newCardCreated = false;
+    hideAddCardBtn = false;
     const newCardId = findIdForNewCard();
     const newTaskId = findIdForNewTask();
     if (e.target.value != "") {
@@ -69,8 +74,12 @@
   }
 
   function deleteCard(e) {
+    hideAddCardBtn = true;
     const cardId = parseInt(e.detail.slice(2));
     kanbanBoard = kanbanBoard.filter(c => c.id !== cardId);
+    setTimeout(() => {
+      hideAddCardBtn = false;
+    }, 400);
   }
 
   function findIdForNewCard() {
@@ -198,22 +207,24 @@
 
 <Flex noWrap={true} align={'start'}>
   {#each kanbanBoard as card, i (card.id)}
-    <Card id={'c_' + card.id} title={card.name} on:deleteCard={deleteCard}>
-      {#each card.tasks as task, t (task.id)}
-        <Task
-          id={'t_' + task.id}
-          firstCard={i === 0 || kanbanBoard[i].tasks[t].value == ''}
-          lastCard={i === kanbanBoard.length - 1 || kanbanBoard[i].tasks[t].value == ''}
-          bind:value={kanbanBoard[i].tasks[t].value}
-          on:deleteTask={deleteTask}
-          on:moveLeft={moveTaskLeft}
-          on:moveRight={moveTaskRight}
-          on:blurred={taskBlurred} />
-      {/each}
-      <Flex>
-        <button id={'addTask_' + i} on:click={addTask}>+</button>
-      </Flex>
-    </Card>
+    <section animate:flip={{ duration: 400 }}>
+      <Card id={'c_' + card.id} title={card.name} on:deleteCard={deleteCard}>
+        {#each card.tasks as task, t (task.id)}
+          <Task
+            id={'t_' + task.id}
+            firstCard={i === 0 || kanbanBoard[i].tasks[t].value == ''}
+            lastCard={i === kanbanBoard.length - 1 || kanbanBoard[i].tasks[t].value == ''}
+            bind:value={kanbanBoard[i].tasks[t].value}
+            on:deleteTask={deleteTask}
+            on:moveLeft={moveTaskLeft}
+            on:moveRight={moveTaskRight}
+            on:blurred={taskBlurred} />
+        {/each}
+        <Flex>
+          <button id={'addTask_' + i} on:click={addTask}>+</button>
+        </Flex>
+      </Card>
+    </section>
   {:else}
     <section>
       <h3>Your board is empty</h3>
@@ -231,7 +242,9 @@
         on:blur={newCardAdded} />
     </Card>
   {/if}
-  <section>
-    <button class="newCard" on:click={addCard}>+</button>
-  </section>
+  {#if !hideAddCardBtn}
+    <section in:fade>
+      <button class="newCard" on:click={addCard}>+</button>
+    </section>
+  {/if}
 </Flex>
