@@ -4,6 +4,7 @@
   import Flex from "../Layout/Flex.svelte";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
+  import { tick } from "svelte"
 
   let newCardCreated = false;
   let hideAddCardBtn = false;
@@ -49,9 +50,10 @@
   function addCard() {
     newCardCreated = true;
     hideAddCardBtn = true;
-    setTimeout(() => {
+    (async() => {
+      await tick();
       newCardInput.focus();
-    }, 10);
+    })();
   }
 
   function newCardAdded(e) {
@@ -67,9 +69,6 @@
         tasks: [{ id: newTaskId, value: "" }]
       });
       kanbanBoard = kanbanBoard;
-      setTimeout(() => {
-        document.getElementById("t_" + newTaskId).focus();
-      }, 10);
     }
   }
 
@@ -97,10 +96,6 @@
     if (cardIsNotEmpty(cardInd)) {
       kanbanBoard[cardInd].tasks.push({ id: newTaskId, value: targetValue });
       kanbanBoard = kanbanBoard;
-      // kanbanBoard[cardInd].tasks;
-      setTimeout(() => {
-        document.getElementById("t_" + newTaskId).focus();
-      }, 10);
     }
   }
 

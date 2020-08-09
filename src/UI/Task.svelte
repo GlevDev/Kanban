@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
   import { slide } from "svelte/transition";
 
   const dispatch = createEventDispatcher();
@@ -10,6 +10,11 @@
   export let lastCard = false;
 
   let taskJustAdded = false;
+  let thisInput;
+
+  onMount(() => {
+    thisInput.focus();
+  })
 </script>
 
 <style>
@@ -85,6 +90,7 @@
     type="text"
     placeholder="Insert task..."
     bind:value
+    bind:this={thisInput}
     on:blur={() => {
       dispatch('blurred', { value: value, id: id });
     }}
