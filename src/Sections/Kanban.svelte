@@ -4,42 +4,21 @@
   import Flex from "../Layout/Flex.svelte";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
-  import { tick } from "svelte"
+  import { tick } from "svelte";
+  import { kanbanBoard } from "../Stores/kanbanStore.js";
 
   let newCardCreated = false;
   let hideAddCardBtn = false;
   let newCardTitle = "";
   let newCardInput;
-  let kanbanBoard = [
-    {
-      id: 0,
-      name: "To Do",
-      tasks: [{ id: 0, value: "Task 2" }, { id: 1, value: "Task 3" }]
-    },
-    {
-      id: 1,
-      name: "Doing",
-      tasks: [{ id: 2, value: "Task 1" }]
-    },
-    {
-      id: 2,
-      name: "Testing",
-      tasks: []
-    },
-    {
-      id: 3,
-      name: "Done",
-      tasks: []
-    }
-  ];
 
   // -------------- //
   // Card functions //
   // -------------- //
   function cardIsNotEmpty(cardInd) {
     if (
-      !(kanbanBoard[cardInd].tasks.slice(-1) == "") ||
-      kanbanBoard[cardInd].tasks.length === 0
+      !($kanbanBoard[cardInd].tasks.slice(-1) == "") ||
+      $kanbanBoard[cardInd].tasks.length === 0
     ) {
       return true;
     } else {
@@ -60,29 +39,24 @@
     newCardTitle = "";
     newCardCreated = false;
     hideAddCardBtn = false;
-    const newCardId = findIdForNewCard();
+    const newCardId = findIdForNewCard(); 
     const newTaskId = findIdForNewTask();
     if (e.target.value != "") {
-      kanbanBoard.push({
-        id: newCardId,
-        name: e.target.value,
-        tasks: [{ id: newTaskId, value: "" }]
-      });
-      kanbanBoard = kanbanBoard;
+      kanbanBoard.addCard(newCardId, e.target.value, newTaskId);
     }
   }
 
   function deleteCard(e) {
     hideAddCardBtn = true;
     const cardId = parseInt(e.detail.slice(2));
-    kanbanBoard = kanbanBoard.filter(c => c.id !== cardId);
+    kanbanBoard.deleteCard(cardId);
     setTimeout(() => {
       hideAddCardBtn = false;
     }, 400);
   }
 
   function findIdForNewCard() {
-    const cardIDs = kanbanBoard.map(o => o.id);
+    const cardIDs = $kanbanBoard.map(o => o.id);
     const newCardId = maxValue(cardIDs) + 1;
     return newCardId ? newCardId : 0;
   }
@@ -94,17 +68,14 @@
     const cardInd = e.target.id.slice(8);
     const newTaskId = findIdForNewTask();
     if (cardIsNotEmpty(cardInd)) {
-      kanbanBoard[cardInd].tasks.push({ id: newTaskId, value: targetValue });
-      kanbanBoard = kanbanBoard;
+      kanbanBoard.addTask(cardInd, newTaskId, targetValue);
     }
   }
 
   function deleteTask(e) {
     const taskID = parseInt(e.detail.slice(2));
     const cardIndex = findCardIndexOfTaskID(e.detail);
-    kanbanBoard[cardIndex].tasks = kanbanBoard[cardIndex].tasks.filter(
-      t => t.id !== taskID
-    );
+    kanbanBoard.deleteTask(cardIndex, taskID);
   }
 
   function moveTaskLeft(t) {
@@ -133,7 +104,7 @@
   function findIdForNewTask() {
     let taskIDsArray = [];
     let taskIDs = [];
-    kanbanBoard.forEach(b => {
+    $kanbanBoard.forEach(b => {
       taskIDs = b.tasks.map(t => t.id);
       taskIDsArray = [...taskIDsArray, taskIDs];
     });
@@ -145,7 +116,7 @@
     const cardID = parseInt(
       document.getElementById(taskID).parentNode.parentNode.id.slice(2)
     );
-    return kanbanBoard.findIndex(b => b.id === cardID);
+    return $kanbanBoard.findIndex(b => b.id === cardID);
   }
 
   // -------------------- //
@@ -201,15 +172,15 @@
 </style>
 
 <Flex noWrap={true} align={'start'}>
-  {#each kanbanBoard as card, i (card.id)}
+  {#each $kanbanBoard as card, i (card.id)}
     <section animate:flip={{ duration: 400 }}>
       <Card id={'c_' + card.id} title={card.name} on:deleteCard={deleteCard}>
         {#each card.tasks as task, t (task.id)}
           <Task
             id={'t_' + task.id}
-            firstCard={i === 0 || kanbanBoard[i].tasks[t].value == ''}
-            lastCard={i === kanbanBoard.length - 1 || kanbanBoard[i].tasks[t].value == ''}
-            bind:value={kanbanBoard[i].tasks[t].value}
+            firstCard={i === 0 || $kanbanBoard[i].tasks[t].value == ''}
+            lastCard={i === $kanbanBoard.length - 1 || $kanbanBoard[i].tasks[t].value == ''}
+            bind:value={$kanbanBoard[i].tasks[t].value}
             on:deleteTask={deleteTask}
             on:moveLeft={moveTaskLeft}
             on:moveRight={moveTaskRight}
